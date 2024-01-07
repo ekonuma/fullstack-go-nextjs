@@ -3,17 +3,55 @@ package main
 import (
 	"database/sql"
 	"encoding/json"
-	"github.com/gorilla/mux"
-	_ "github.com/lib/pq"
 	"log"
 	"net/http"
 	"os"
+
+	"github.com/gorilla/mux"
+	"github.com/gorilla/websocket"
+	_ "github.com/lib/pq"
 )
 
 type User struct {
 	Id   int    `json:"id"`
 	Name string `json:"name"`
 	Email string `json:"email"`
+}
+
+var upgrader = websocket.Upgrader{
+	ReadBufferSize: 1024,
+	WriteBufferSize: 1024,
+	CheckOrigin: func(r *http.Request) bool {
+		return true
+	},
+}
+
+func websocketHandler(w http.ResponseWriter, r *http.Request){
+	conn, err := upgrader.Upgrade(w,r,nil)
+
+	if err != nil{
+		log.Fatalln(err)
+	}
+
+	defer conn.Close()
+
+	for{
+		_, message, err := conn.ReadMessage() 
+
+		if err != nil{
+			log.Fatalln(err)
+			break
+		}
+
+		log.Printf("Received message: %s", message)
+
+		err = conn.WriteMessage(websocket.TextMessage, message)
+
+		if err != nil{
+			log.Fatalln(err)
+			break
+		}
+	}
 }
 
 func main(){
@@ -34,6 +72,7 @@ func main(){
 	router.HandleFunc("/api/go/users/{id}", getUser(db)).Methods("GET")
 	router.HandleFunc("/api/go/users/{id}", updateUser(db)).Methods("PUT")
 	router.HandleFunc("/api/go/users/{id}", deleteUser(db)).Methods("DELETE")
+	router.HandleFunc("/websocket", websocketHandler)
 
 
 	enhanceRouter := enableCORS(jsonContentTypeMiddleware(router))
